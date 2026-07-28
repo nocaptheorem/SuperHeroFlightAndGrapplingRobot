@@ -1,4 +1,7 @@
 using Godot;
+using System.Net.Sockets;
+using System.Text;
+using System.Text.Json;
 
 // =================================================================================
 // CORE: KINEMATIC STATE
@@ -145,6 +148,23 @@ public partial class SuperHeroFlightAndGrapplingRobot : Skeleton3D
   [Export] public float FlightStabilizationDamping = 5000.0f;
   #endregion
 
+  #region Telemetry Configuration
+  [ExportGroup("TELEMETRY")]
+  [Export] public bool EnableTelemetry = true;
+  [Export] public float TelemetryPrintRateHz = 10.0f;
+
+  private UdpClient? _udpClient;
+  private const string UDP_IP = "127.0.0.1";
+  private const int UDP_PORT = 9870;
+
+  private float _telemetryTimer = 0.0f;
+  private float _lastUdpErrorTime = -10.0f;
+  private const float ERROR_LOG_INTERVAL_SEC = 2.0f;
+
+  // Cached metrics for emission
+  private Vector3 _lastFlightForce = Vector3.Zero;
+  #endregion
+
   // --- INTERNAL STATE ---
   private bool _isActive = true;
   private bool _wasFallen = false;
@@ -269,6 +289,25 @@ public partial class SuperHeroFlightAndGrapplingRobot : Skeleton3D
     InitializeFlightEffectors();
 
     CallDeferred(nameof(StartPhysics));
+
+    if (EnableTelemetry)
+    {
+        try
+        {
+            _udpClient = new UdpClient();
+        }
+        catch (System.Exception ex)
+        {
+            GD.PrintErr($"[TELEMETRY INIT ERROR] Failed to instantiate UdpClient: {ex.Message}");
+        }
+    }
+  }
+
+  public override void _ExitTree()
+  {
+    _udpClient?.Close();
+    _udpClient?.Dispose();
+    _udpClient = null;
   }
 
   private void InitializeBones()
@@ -771,9 +810,20 @@ public partial class SuperHeroFlightAndGrapplingRobot : Skeleton3D
       ApplyGravityCompensation(dt);
 
       Vector3 flightForce = ComputeFlightForce(ref state, dt);
+      _lastFlightForce = flightForce;
       ApplyCoupledFlightDynamics(dt, targetBasis, flightForce);
 
       if (DrawDebugGizmos) DrawGizmos(ref state);
+      if (EnableTelemetry)
+      {
+        _telemetryTimer += (float)delta;
+        if (TelemetryPrintRateHz > 0 && _telemetryTimer >= (1.0f / TelemetryPrintRateHz))
+        {
+          LogTelemetry(state);
+          _telemetryTimer = 0.0f;
+        }
+      }
+
       return;
     }
 
@@ -827,6 +877,82 @@ public partial class SuperHeroFlightAndGrapplingRobot : Skeleton3D
     }
 
     if (DrawDebugGizmos) DrawGizmos(ref state);
+    if (EnableTelemetry)
+    {
+        _telemetryTimer += (float)delta;
+        if (TelemetryPrintRateHz > 0 && _telemetryTimer >= (1.0f / TelemetryPrintRateHz))
+        {
+            LogTelemetry(state);
+            _telemetryTimer = 0.0f;
+        }
+    }
+  }
+
+  private void LogTelemetry(RagdollState state)
+  {
+    if (_udpClient == null)
+    {
+      ReportTelemetryError("UdpClient is uninitialized or null.");
+      return;
+    }
+
+    Vector3 coreVel = (_hips != null) ? _hips.LinearVelocity : state.Velocity;
+
+    var metrics = new
+    {
+      timestamp = Time.GetTicksMsec() / 1000.0f,
+
+      // Kinematics & Flight State
+      flight_mode = FlightModeActive ? 1 : 0,
+      alt_actual = _chest?.GlobalPosition.Y ?? state.CenterOfMass.Y,
+      com_y = state.CenterOfMass.Y,
+      vel_x = coreVel.X,
+      vel_y = coreVel.Y,
+      vel_z = coreVel.Z,
+      target_vel_mag = _targetFlightVelocity.Length(),
+      actual_vel_mag = coreVel.Length(),
+      flight_force_n = _lastFlightForce.Length(),
+
+      // Attitude & Turbulence Metrics
+      chest_ang_vel_mag = _chest?.AngularVelocity.Length() ?? 0.0f,
+
+      // Grapple Mechanics
+      is_grappling_l = _isGrapplingL ? 1 : 0,
+      cable_length_l = _cableLengthL,
+      is_grappling_r = _isGrapplingR ? 1 : 0,
+      cable_length_r = _cableLengthR,
+      is_reeling = _isReeling ? 1 : 0,
+
+      // Ragdoll Flags
+      is_airborne = state.IsAirborne ? 1 : 0,
+      is_fallen = state.IsFallen ? 1 : 0
+    };
+
+    try
+    {
+      string jsonString = JsonSerializer.Serialize(metrics);
+      byte[] payload = Encoding.UTF8.GetBytes(jsonString);
+
+      _udpClient.Send(payload, payload.Length, UDP_IP, UDP_PORT);
+    }
+    catch (SocketException ex)
+    {
+      ReportTelemetryError($"SocketException on port {UDP_PORT}: {ex.Message} (Code: {ex.SocketErrorCode})");
+    }
+    catch (System.Exception ex)
+    {
+      ReportTelemetryError($"Unexpected telemetry error: {ex.Message}");
+    }
+  }
+
+  private void ReportTelemetryError(string message)
+  {
+    float currentTime = Time.GetTicksMsec() / 1000.0f;
+    if (currentTime - _lastUdpErrorTime >= ERROR_LOG_INTERVAL_SEC)
+    {
+      GD.PrintErr($"[TELEMETRY ERROR] {message}");
+      _lastUdpErrorTime = currentTime;
+    }
   }
 
   private RagdollState ComputeKinematicState()
