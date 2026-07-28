@@ -123,8 +123,8 @@ public partial class SuperHeroFlightAndGrapplingRobot : Skeleton3D
   private Vector3 _ambientWind = new Vector3(0, 0, 0);
   #endregion
 
-  #region 7. Grapple Gallore Mechanics
-  [ExportGroup("10. Grapple Gallore Mechanics")]
+  #region 7. Grapple Mechanics
+  [ExportGroup("10. Grapple Mechanics")]
   [Export] public float GrappleMaxDistance = 500.0f;
   [Export] public float GrappleStiffness = 30000.0f;
   [Export] public float GrappleDamping = 2000.0f;
