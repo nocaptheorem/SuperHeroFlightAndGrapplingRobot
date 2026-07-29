@@ -16,12 +16,18 @@
 * **Godot Engine v4.x** (specifically the **.NET edition**)
 * **.NET 8.0 SDK** (or higher)
 
+### Import Ragdoll Artifacts (only required for initial project setup)
+
+```bash
+godot --import
+```
+
 ### Build & Run
 Clone the repository and compile/run the C# solution:
 
 ```bash
 # Build C# solution and execute in Godot
-dotnet build && godot --headless --build-solutions --verbose Main.tscn
+dotnet build && godot
 ```
 
 ---
