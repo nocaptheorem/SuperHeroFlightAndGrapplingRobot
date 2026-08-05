@@ -52,11 +52,12 @@ Before applying forces, the control system extracts macro-level physical metrics
 
 * **Mass & Center of Mass (CoM):** Evaluated recursively across all physical bones to calculate the total mass and weighted global CoM dynamically in real-time.
 
-$$ \mathbf{r}_{\text{CoM}} = \frac{\sum (m_i \cdot \mathbf{r}_i)}{\sum m_i} $$
+$$ \mathbf{r}_{\mathrm{CoM}} = \frac{\sum (m_i \cdot \mathbf{r}_i)}{\sum m_i} $$
 
 * **Recursive Subtree Gravity Compensation:** Pre-computed branch masses and localized target CoMs allow the system to accurately calculate counter-torques required to achieve weightlessness (gravity compensation) per limb without explicit rigid-body kinematic pinning.
 
-$$ \boldsymbol{\tau}_{\text{comp}} = (\mathbf{r}_{\text{CoM, subtree}} - \mathbf{r}_{\text{pivot}}) \times (m_{\text{subtree}} \mathbf{g}) $$
+$$ \boldsymbol{\tau}_{\mathrm{comp}} = (\mathbf{r}_{\mathrm{CoM, subtree}} - \mathbf{r}_{\mathrm{pivot}}) \times
+(m_{\mathrm{subtree}} \mathbf{g}) $$
 
 ---
 
@@ -64,10 +65,11 @@ $$ \boldsymbol{\tau}_{\text{comp}} = (\mathbf{r}_{\text{CoM, subtree}} - \mathbf
 
 The character maintains dynamic equilibrium using a layered hierarchical stabilization pipeline:
 
-* **Virtual Model Control (VMC):** Models virtual mechanical springs and dampers between the character's ground contact points (Center of Pressure) and its global CoM. It calculates the necessary virtual force to maintain height and horizontal stability, then maps this via cross-product lever arms into physical joint torques across the leg chain ($\text{Foot} \to \text{Lower Leg} \to \text{Upper Leg}$).
+* **Virtual Model Control (VMC):** Models virtual mechanical springs and dampers between the character's ground contact points (Center of Pressure) and its global CoM. It calculates the necessary virtual force to maintain height and horizontal stability, then maps this via cross-product lever arms into physical joint torques across the leg chain
+($\mathrm{Foot} \to \mathrm{Lower Leg} \to \mathrm{Upper Leg}$).
 
-$$ \mathbf{F}_{\text{virtual}} = K_p (\mathbf{r}_{\text{target}} - \mathbf{r}_{\text{CoM}}) - K_d \mathbf{v}_{\text{CoM}} $$
-$$ \boldsymbol{\tau}_{\text{joint}} = \mathbf{r}_{\text{joint} \to \text{CoP}} \times \mathbf{F}_{\text{virtual}} $$
+$$ \mathbf{F}_{\mathrm{virtual}} = K_p (\mathbf{r}_{\mathrm{target}} - \mathbf{r}_{\mathrm{CoM}}) - K_d \mathbf{v}_{\mathrm{CoM}} $$
+$$ \boldsymbol{\tau}_{\mathrm{joint}} = \mathbf{r}_{\mathrm{joint} \to \mathrm{CoP}} \times \mathbf{F}_{\mathrm{virtual}} $$
 
 * **Hip Gyro Stabilization & Ankle Strategy:** Applies corrective torques to the core to prevent tipping based on ground-normal angular error, and reads ground normals from `ShapeCast3D` sensors to apply local ankle torques keeping feet flush against inclined surfaces.
 
@@ -79,8 +81,9 @@ To force the physics skeleton to track targeted animation frames (via an `Animat
 
 * **Quaternion Axis-Angle Torque Drives:** Evaluates rotational errors between target joint poses and current physical poses to apply corrective torques.
 
-$$ \mathbf{q}_{\text{err}} = \mathbf{q}_{\text{current}}^{-1} \otimes \mathbf{q}_{\text{target}} $$
-$$ \boldsymbol{\tau}_{\text{cmd}} = (K_p \theta) \mathbf{\hat{u}} - K_d \boldsymbol{\omega}_{\text{rel}} $$
+$$ \mathbf{q}_{\mathrm{err}} = \mathbf{q}_{\mathrm{current}}^{-1} \otimes \mathbf{q}_{\mathrm{target}} $$
+
+$$ \boldsymbol{\tau}_{\mathrm{cmd}} = (K_p \theta) \mathbf{\hat{u}} - K_d \boldsymbol{\omega}_{\mathrm{rel}} $$
 
 * **Impact Relaxation:** If a joint experiences a sudden angular error exceeding `ImpactRelaxationAngle`, the controller drops stiffness ($K_p$) by 95% and spikes damping ($K_d$) by 5x, allowing the ragdoll to absorb extreme shocks (like falling at terminal velocity) without numerical explosion.
 
@@ -93,8 +96,9 @@ The grapple system casts environmental rays to establish constraints, behaving a
 * **Dynamic Wrapping:** Solves line-of-sight occlusion by continuously checking raycasts between hand positions and anchors. If blocked, a new waypoint is inserted into a multi-node path array.
 * **Tension & Centrifugal Slingshot:** Models the cable as a unilateral distance constraint. Tension scales proportionally to length displacement. Linear momentum tangent to the cable is extracted and converted into a centrifugal boost, yielding Spider-Man-esque slingshot dynamics.
 
-$$ F_{\text{tension}} = \max(0, -K_s (\|\mathbf{x}\| - L) - K_d (\mathbf{v} \cdot \mathbf{\hat{x}})) $$
-$$ \mathbf{F}_{\text{slingshot}} = \mathbf{\hat{v}}_{\text{tangent}} (F_{\text{tension}} \cdot C_{\text{boost}}) $$
+$$ F_{\mathrm{tension}} = \max(0, -K_s (\|\mathbf{x}\| - L) - K_d (\mathbf{v} \cdot \mathbf{\hat{x}})) $$
+
+$$ \mathbf{F}_{\mathrm{slingshot}} = \mathbf{\hat{v}}_{\mathrm{tangent}} (F_{\mathrm{tension}} \cdot C_{\mathrm{boost}}) $$
 
 ---
 
@@ -104,7 +108,7 @@ $$ \mathbf{F}_{\text{slingshot}} = \mathbf{\hat{v}}_{\text{tangent}} (F_{\text{t
 * **Distributed Effector Forces:** Maps calculated total flight thrust onto four primary effectors (Hands and Feet). Includes active bracing torques so limbs physically point opposite the thrust vector.
 * **Aerodynamics & Fluid Drag:** Calculates varying fluid drag per bone depending on the limb's longitudinal vs. lateral surface exposure relative to current air velocity.
 
-$$ \mathbf{F}_d = - \frac{1}{2} \rho v^2 C_d A_{\text{effective}} \mathbf{\hat{v}} $$
+$$ \mathbf{F}_d = - \frac{1}{2} \rho v^2 C_d A_{\mathrm{effective}} \mathbf{\hat{v}} $$
 
 ---
 
